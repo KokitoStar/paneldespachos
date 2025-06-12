@@ -696,6 +696,11 @@
                 return;
             }
 
+            // Debug: mostrar formato de fecha del primer pedido
+            if (pedidos.length > 0) {
+                console.log('Formato de fecha recibido:', typeof pedidos[0].Fecha, pedidos[0].Fecha);
+            }
+
             tbody.innerHTML = pedidos.map(pedido => `
                 <tr>
                     <td><strong>${pedido['Código Compra'] || 'N/A'}</strong></td>
@@ -703,7 +708,7 @@
                     <td>${pedido.Nombre}</td>
                     <td>${pedido.Ciudad}</td>
                     <td>${pedido['Total Kits']}</td>
-                    <td>$${formatearNumero(pedido['Precio Total'])}</td>
+                    <td>${formatearNumero(pedido['Precio Total'])}</td>
                     <td><span class="status-badge status-${getStatusClass(pedido.Estado)}">${pedido.Estado || 'Pendiente'}</span></td>
                     <td>${pedido.Transportadora || '-'}</td>
                     <td class="actions-column">
@@ -892,16 +897,91 @@
         // Funciones auxiliares
         function formatearFecha(fecha) {
             if (!fecha) return 'N/A';
+            
             try {
-                return new Date(fecha).toLocaleDateString('es-CO');
-            } catch {
-                return fecha;
+                // Si la fecha ya está en formato legible, devolverla tal como está
+                if (typeof fecha === 'string') {
+                    // Verificar si ya está en formato DD/MM/YYYY o similar
+                    if (fecha.includes('/') || fecha.includes('-')) {
+                        // Si contiene barra o guión, probablemente ya está formateada
+                        if (fecha.length > 12) {
+                            // Si es muy larga, probablemente incluye hora, extraer solo fecha
+                            const soloFecha = fecha.split(' ')[0];
+                            return soloFecha;
+                        }
+                        return fecha;
+                    }
+                    
+                    // Intentar parsear como fecha ISO o timestamp
+                    const fechaObj = new Date(fecha);
+                    if (!isNaN(fechaObj.getTime())) {
+                        return fechaObj.toLocaleDateString('es-CO', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                        });
+                    }
+                }
+                
+                // Si es un número (timestamp)
+                if (typeof fecha === 'number') {
+                    const fechaObj = new Date(fecha);
+                    return fechaObj.toLocaleDateString('es-CO', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                }
+                
+                // Si es un objeto Date
+                if (fecha instanceof Date) {
+                    return fecha.toLocaleDateString('es-CO', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                }
+                
+                // Si nada funciona, devolver la fecha tal como está
+                return fecha.toString();
+                
+            } catch (error) {
+                console.log('Error formateando fecha:', error, 'Fecha original:', fecha);
+                // Si hay cualquier error, devolver la fecha original
+                return fecha.toString();
             }
         }
 
         function formatearNumero(numero) {
             if (!numero) return '0';
-            return parseInt(numero).toLocaleString('es-CO');
+            
+            try {
+                // Si ya es un número
+                if (typeof numero === 'number') {
+                    return numero.toLocaleString('es-CO');
+                }
+                
+                // Si es string, limpiar y convertir
+                if (typeof numero === 'string') {
+                    // Remover caracteres no numéricos excepto punto y coma
+                    const numeroLimpio = numero.replace(/[^\d.,]/g, '');
+                    
+                    // Si está vacío después de limpiar
+                    if (!numeroLimpio) return '0';
+                    
+                    // Convertir a número
+                    const numeroConvertido = parseFloat(numeroLimpio.replace(',', '.'));
+                    
+                    if (isNaN(numeroConvertido)) return '0';
+                    
+                    return numeroConvertido.toLocaleString('es-CO');
+                }
+                
+                return '0';
+            } catch (error) {
+                console.log('Error formateando número:', error, 'Número original:', numero);
+                return numero.toString();
+            }
         }
 
         function getStatusClass(estado) {
