@@ -576,7 +576,7 @@
         // MODO DE PRUEBA - Descomenta esta línea para usar datos de ejemplo
         // const MODO_PRUEBA = true;  
         const MODO_PRUEBA = false;  // VOLVER A MODO REAL
-        const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxKA85MVduGrv4goNZIkbRCJopn-Iu-GH4vbp3vVxQIdhL5QA2I0OyaVjeQcaLkd2k5/exec';
+        const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz1eLem9P3gEDgzZVRCOuPthCyjBcST51QJGXRIzexeR8mbMZLyRsph-05Zc_zVvpq8/exec';
 
         // Datos de ejemplo para pruebas
         const datosEjemplo = [
@@ -637,7 +637,7 @@
             setTimeout(() => container.innerHTML = '', 5000);
         }
 
-        // Función para cargar todos los pedidos
+        // Función para cargar todos los pedidos usando JSONP
         async function cargarTodosPedidos() {
             mostrarCargando(true);
             
@@ -654,36 +654,40 @@
                     return;
                 }
 
-                const response = await fetch(`${GOOGLE_SHEETS_URL}?action=getPedidos`);
+                // Usar JSONP para evitar problemas de CORS
+                const callbackName = 'callback_' + Date.now();
+                const script = document.createElement('script');
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
+                window[callbackName] = function(data) {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    
+                    if (data.success) {
+                        pedidosData = data.pedidos;
+                        mostrarPedidos(pedidosData);
+                        actualizarDashboard();
+                        mostrarAlerta('✅ Pedidos cargados correctamente', 'success');
+                    } else {
+                        mostrarAlerta('❌ Error al cargar pedidos: ' + data.error, 'danger');
+                    }
+                    mostrarCargando(false);
+                };
                 
-                const data = await response.json();
+                script.src = `${GOOGLE_SHEETS_URL}?action=getPedidos&callback=${callbackName}`;
+                script.onerror = function() {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    mostrarAlerta('❌ Error de conexión. Cambia MODO_PRUEBA = true para usar datos de ejemplo.', 'danger');
+                    mostrarCargando(false);
+                };
                 
-                if (data.success) {
-                    pedidosData = data.pedidos;
-                    mostrarPedidos(pedidosData);
-                    actualizarDashboard();
-                    mostrarAlerta('✅ Pedidos cargados correctamente', 'success');
-                } else {
-                    mostrarAlerta('❌ Error al cargar pedidos: ' + data.error, 'danger');
-                }
+                document.head.appendChild(script);
+                
             } catch (error) {
                 console.error('Error completo:', error);
-                
-                let errorMsg = 'Error de conexión al cargar pedidos';
-                if (error.message.includes('Failed to fetch')) {
-                    errorMsg = 'No se puede conectar con Google Sheets. Verifica la URL del script.';
-                } else if (error.message.includes('HTTP')) {
-                    errorMsg = `Error del servidor: ${error.message}`;
-                }
-                
-                mostrarAlerta(`❌ ${errorMsg}. Cambia MODO_PRUEBA = true para usar datos de ejemplo.`, 'danger');
+                mostrarAlerta('❌ Error inesperado al cargar pedidos', 'danger');
+                mostrarCargando(false);
             }
-            
-            mostrarCargando(false);
         }
 
         // Función para buscar pedidos
@@ -837,21 +841,49 @@
             await cargarPedidoEnModal(codigo, false);
         }
 
-        // Función para cargar pedido en modal
+        // Función para cargar pedido en modal usando JSONP
         async function cargarPedidoEnModal(codigo, soloLectura = false) {
             try {
-                const response = await fetch(`${GOOGLE_SHEETS_URL}?action=searchByCodigo&codigo=${encodeURIComponent(codigo)}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    pedidoActual = data.pedido;
-                    mostrarModalPedido(pedidoActual, soloLectura);
-                } else {
-                    mostrarAlerta('❌ Error al cargar el pedido', 'danger');
+                if (MODO_PRUEBA) {
+                    // Buscar en datos de ejemplo
+                    const pedido = pedidosData.find(p => p['Código Compra'] === codigo);
+                    if (pedido) {
+                        pedidoActual = pedido;
+                        mostrarModalPedido(pedidoActual, soloLectura);
+                    } else {
+                        mostrarAlerta('❌ Pedido no encontrado en datos de prueba', 'danger');
+                    }
+                    return;
                 }
+
+                // Usar JSONP para buscar por código
+                const callbackName = 'search_' + Date.now();
+                const script = document.createElement('script');
+                
+                window[callbackName] = function(data) {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    
+                    if (data.success) {
+                        pedidoActual = data.pedido;
+                        mostrarModalPedido(pedidoActual, soloLectura);
+                    } else {
+                        mostrarAlerta('❌ Error al cargar el pedido: ' + data.error, 'danger');
+                    }
+                };
+                
+                script.src = `${GOOGLE_SHEETS_URL}?action=searchByCodigo&codigo=${encodeURIComponent(codigo)}&callback=${callbackName}`;
+                script.onerror = function() {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    mostrarAlerta('❌ Error de conexión al buscar pedido', 'danger');
+                };
+                
+                document.head.appendChild(script);
+                
             } catch (error) {
                 console.error('Error:', error);
-                mostrarAlerta('❌ Error de conexión', 'danger');
+                mostrarAlerta('❌ Error inesperado', 'danger');
             }
         }
 
