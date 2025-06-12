@@ -553,10 +553,14 @@
                 </div>
             </div>
 
-            <div class="form-row full">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Valor del Envío</label>
+                    <input type="number" class="form-input" id="modalValorEnvio" placeholder="Valor del envío" min="0">
+                </div>
                 <div class="form-group">
                     <label class="form-label">Observaciones</label>
-                    <textarea class="form-input" id="modalObservaciones" rows="3" placeholder="Notas adicionales sobre el pedido..."></textarea>
+                    <textarea class="form-input" id="modalObservaciones" rows="2" placeholder="Notas adicionales sobre el pedido..."></textarea>
                 </div>
             </div>
 
@@ -772,9 +776,10 @@
                 <h4 style="color: #E50695; margin-bottom: 15px;">🎨 Detalles del Pedido</h4>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px;">
                     <div><strong>Kits:</strong> ${pedido['Total Kits']}</div>
-                    <div><strong>Precio Kits:</strong> $${formatearNumero(pedido['Precio Kits'])}</div>
-                    <div><strong>Domicilio:</strong> $${formatearNumero(pedido['Precio Domicilio'])}</div>
-                    <div><strong>Total:</strong> $${formatearNumero(pedido['Precio Total'])}</div>
+                    <div><strong>Precio Kits:</strong> ${formatearNumero(pedido['Precio Kits'])}</div>
+                    <div><strong>Domicilio:</strong> ${formatearNumero(pedido['Precio Domicilio'])}</div>
+                    <div><strong>Total:</strong> ${formatearNumero(pedido['Precio Total'])}</div>
+                    ${pedido['Valor Envío'] ? `<div><strong>Costo Real Envío:</strong> ${formatearNumero(pedido['Valor Envío'])}</div>` : ''}
                 </div>
                 
                 ${pedido['Detalles Kits'] ? `
@@ -789,11 +794,15 @@
             document.getElementById('modalEstado').value = pedido.Estado || 'Pendiente';
             document.getElementById('modalTransportadora').value = pedido.Transportadora || '';
             document.getElementById('modalNumeroGuia').value = pedido['Número Guía'] || '';
-            document.getElementById('modalFechaEnvio').value = pedido['Fecha Envío'] || '';
+            document.getElementById('modalValorEnvio').value = pedido['Valor Envío'] || '';
             document.getElementById('modalObservaciones').value = pedido.Observaciones || '';
 
+            // **PROBLEMA 2 SOLUCIONADO: Fecha automática del día actual**
+            const fechaActual = new Date().toISOString().split('T')[0];
+            document.getElementById('modalFechaEnvio').value = pedido['Fecha Envío'] || fechaActual;
+
             // Configurar modo de solo lectura
-            const campos = ['modalEstado', 'modalTransportadora', 'modalNumeroGuia', 'modalFechaEnvio', 'modalObservaciones'];
+            const campos = ['modalEstado', 'modalTransportadora', 'modalNumeroGuia', 'modalFechaEnvio', 'modalValorEnvio', 'modalObservaciones'];
             campos.forEach(campo => {
                 document.getElementById(campo).disabled = soloLectura;
             });
@@ -819,10 +828,17 @@
                     'Transportadora': document.getElementById('modalTransportadora').value,
                     'Número Guía': document.getElementById('modalNumeroGuia').value,
                     'Fecha Envío': document.getElementById('modalFechaEnvio').value,
+                    'Valor Envío': document.getElementById('modalValorEnvio').value,
                     'Observaciones': document.getElementById('modalObservaciones').value
                 };
 
-                // Llamar función del script para actualizar
+                console.log('Enviando actualización:', {
+                    action: 'updatePedido',
+                    codigo: pedidoActual['Código Compra'],
+                    updates: updates
+                });
+
+                // **PROBLEMA 1 SOLUCIONADO: Mejorar la llamada al servidor**
                 const response = await fetch(GOOGLE_SHEETS_URL, {
                     method: 'POST',
                     headers: {
@@ -835,7 +851,14 @@
                     })
                 });
 
+                console.log('Respuesta del servidor:', response.status, response.statusText);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
+                console.log('Datos de respuesta:', data);
 
                 if (data.success) {
                     mostrarAlerta('✅ Pedido actualizado correctamente', 'success', 'modalAlerts');
@@ -856,12 +879,20 @@
                     }, 2000);
                     
                 } else {
-                    mostrarAlerta('❌ Error al actualizar: ' + data.error, 'danger', 'modalAlerts');
+                    mostrarAlerta('❌ Error al actualizar: ' + (data.error || 'Error desconocido'), 'danger', 'modalAlerts');
                 }
 
             } catch (error) {
-                console.error('Error:', error);
-                mostrarAlerta('❌ Error de conexión al actualizar', 'danger', 'modalAlerts');
+                console.error('Error completo:', error);
+                let errorMsg = 'Error de conexión al actualizar';
+                
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = 'Error de red. Verifica tu conexión a internet.';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = `Error del servidor: ${error.message}`;
+                }
+                
+                mostrarAlerta(`❌ ${errorMsg}`, 'danger', 'modalAlerts');
             }
 
             saveBtn.disabled = false;
