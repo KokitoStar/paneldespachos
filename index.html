@@ -573,7 +573,54 @@
 
     <script>
         // Configuración
+        // MODO DE PRUEBA - Descomenta esta línea para usar datos de ejemplo
+        // const MODO_PRUEBA = true;  
+        const MODO_PRUEBA = false;  // VOLVER A MODO REAL
         const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbz1eLem9P3gEDgzZVRCOuPthCyjBcST51QJGXRIzexeR8mbMZLyRsph-05Zc_zVvpq8/exec';
+
+        // Datos de ejemplo para pruebas
+        const datosEjemplo = [
+            {
+                'Código Compra': 'KIT110625-01',
+                'Fecha': '11/6/2025 3:47:32 PM',
+                'Nombre': 'María García',
+                'Teléfono': '3001234567',
+                'Dirección': 'Calle 123 #45-67',
+                'Unidad/Edificio': 'Apto 501',
+                'Ciudad': 'Medellín',
+                'Total Kits': '2',
+                'Precio Kits': '290000',
+                'Precio Domicilio': '10000',
+                'Precio Total': '300000',
+                'Detalles Kits': 'KIT 1: Mariposa(5), Unicornio(3) | Colores: 💙Azul oscuro, 🩷Fucsia || KIT 2: Dragón(4), Flash(2) | Colores: 💛Dorado, 💚Verde',
+                'Estado': 'Pendiente',
+                'Transportadora': '',
+                'Número Guía': '',
+                'Fecha Envío': '',
+                'Valor Envío': '',
+                'Observaciones': ''
+            },
+            {
+                'Código Compra': 'KIT110625-02',
+                'Fecha': '11/6/2025 4:15:18 PM',
+                'Nombre': 'Carlos Ruiz',
+                'Teléfono': '3109876543',
+                'Dirección': 'Carrera 45 #23-89',
+                'Unidad/Edificio': '',
+                'Ciudad': 'Bogotá',
+                'Total Kits': '1',
+                'Precio Kits': '145000',
+                'Precio Domicilio': '10000',
+                'Precio Total': '155000',
+                'Detalles Kits': 'KIT 1: Batman(8), Gato(4), ⭐Kuromi(3) | Colores: 🖤Negro, 💜Morado, 💛Dorado',
+                'Estado': 'En Proceso',
+                'Transportadora': 'Servientrega',
+                'Número Guía': 'SER123456789',
+                'Fecha Envío': '2025-06-12',
+                'Valor Envío': '8500',
+                'Observaciones': 'Cliente solicita entrega en la mañana'
+            }
+        ];
         
         let pedidosData = [];
         let pedidoActual = null;
@@ -595,7 +642,24 @@
             mostrarCargando(true);
             
             try {
+                if (MODO_PRUEBA) {
+                    // Usar datos de ejemplo
+                    setTimeout(() => {
+                        pedidosData = datosEjemplo;
+                        mostrarPedidos(pedidosData);
+                        actualizarDashboard();
+                        mostrarAlerta('✅ Datos de prueba cargados', 'warning');
+                        mostrarCargando(false);
+                    }, 1000);
+                    return;
+                }
+
                 const response = await fetch(`${GOOGLE_SHEETS_URL}?action=getPedidos`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -607,8 +671,16 @@
                     mostrarAlerta('❌ Error al cargar pedidos: ' + data.error, 'danger');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                mostrarAlerta('❌ Error de conexión al cargar pedidos', 'danger');
+                console.error('Error completo:', error);
+                
+                let errorMsg = 'Error de conexión al cargar pedidos';
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = 'No se puede conectar con Google Sheets. Verifica la URL del script.';
+                } else if (error.message.includes('HTTP')) {
+                    errorMsg = `Error del servidor: ${error.message}`;
+                }
+                
+                mostrarAlerta(`❌ ${errorMsg}. Cambia MODO_PRUEBA = true para usar datos de ejemplo.`, 'danger');
             }
             
             mostrarCargando(false);
@@ -628,6 +700,34 @@
             mostrarCargando(true);
 
             try {
+                if (MODO_PRUEBA) {
+                    // Búsqueda local en modo de prueba
+                    setTimeout(() => {
+                        let resultados = pedidosData.filter(pedido => {
+                            let coincide = true;
+                            
+                            if (codigo && !pedido['Código Compra'].includes(codigo)) {
+                                coincide = false;
+                            }
+                            
+                            if (cliente && !pedido.Nombre.toLowerCase().includes(cliente)) {
+                                coincide = false;
+                            }
+                            
+                            if (estado && pedido.Estado !== estado) {
+                                coincide = false;
+                            }
+                            
+                            return coincide;
+                        });
+                        
+                        mostrarPedidos(resultados);
+                        mostrarAlerta(`✅ ${resultados.length} pedido(s) encontrado(s) (modo de prueba)`, 'warning');
+                        mostrarCargando(false);
+                    }, 500);
+                    return;
+                }
+
                 if (codigo) {
                     // Búsqueda específica por código
                     const response = await fetch(`${GOOGLE_SHEETS_URL}?action=searchByCodigo&codigo=${encodeURIComponent(codigo)}`);
@@ -831,6 +931,29 @@
                     'Valor Envío': document.getElementById('modalValorEnvio').value,
                     'Observaciones': document.getElementById('modalObservaciones').value
                 };
+
+                if (MODO_PRUEBA) {
+                    // Simular actualización en modo de prueba
+                    setTimeout(() => {
+                        // Actualizar datos locales
+                        const index = pedidosData.findIndex(p => p['Código Compra'] === pedidoActual['Código Compra']);
+                        if (index !== -1) {
+                            Object.assign(pedidosData[index], updates);
+                        }
+                        
+                        mostrarAlerta('✅ Pedido actualizado (modo de prueba)', 'success', 'modalAlerts');
+                        mostrarPedidos(pedidosData);
+                        actualizarDashboard();
+                        
+                        setTimeout(() => {
+                            cerrarModal();
+                        }, 2000);
+                        
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = originalText;
+                    }, 1000);
+                    return;
+                }
 
                 console.log('Enviando actualización:', {
                     action: 'updatePedido',
